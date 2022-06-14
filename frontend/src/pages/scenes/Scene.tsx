@@ -42,6 +42,10 @@ interface Props {
 }
 
 const SceneComponent: FC<Props> = ({ scene }) => {
+  if (!scene) {
+    return null;
+  }
+
   const history = useHistory();
   const activeTab = history.location.hash?.slice(1) || DEFAULT_TAB;
   const auth = useContext(AuthContext);

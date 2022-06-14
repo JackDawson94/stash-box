@@ -22,6 +22,7 @@ import {
   ROUTE_FORGOT_PASSWORD,
   ROUTE_SITES,
   ROUTE_DRAFTS,
+  ROUTE_SCENES_COMPARE,
 } from "src/constants/route";
 import AuthContext from "./AuthContext";
 
@@ -115,6 +116,11 @@ const Main: FC = ({ children }) => {
           {canEdit(user) && (
             <NavLink to={ROUTE_DRAFTS} className="nav-link">
               Drafts
+            </NavLink>
+          )}
+          {canEdit(user) && (
+            <NavLink to={ROUTE_SCENES_COMPARE} className="nav-link">
+              Comparer
             </NavLink>
           )}
           {isAdmin(user) && (

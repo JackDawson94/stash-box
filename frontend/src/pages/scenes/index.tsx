@@ -11,6 +11,7 @@ import {
   ROUTE_SCENES,
   ROUTE_SCENE_EDIT,
   ROUTE_SCENE_DELETE,
+  ROUTE_SCENES_COMPARE,
 } from "src/constants/route";
 
 import Scenes from "./Scenes";
@@ -18,6 +19,7 @@ import Scene from "./Scene";
 import SceneEdit from "./SceneEdit";
 import SceneAdd from "./SceneAdd";
 import SceneDelete from "./SceneDelete";
+import ScenesCompare from "./ScenesCompare";
 
 const SceneLoader: FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +69,9 @@ const SceneRoutes: FC = () => (
         <Title page="Scenes" />
         <Scenes />
       </>
+    </Route>
+    <Route exact path={ROUTE_SCENES_COMPARE}>
+      <ScenesCompare />
     </Route>
     <Route path={ROUTE_SCENE}>
       <SceneLoader />
