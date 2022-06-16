@@ -10,6 +10,8 @@ import { OperationEnum, useSceneEdit } from "src/graphql";
 import { EditNote } from "src/components/form";
 import { editHref } from "src/utils";
 
+import SceneCard from './SceneCard'
+
 const schema = yup.object({
   id: yup.string().required(),
   note: yup.string().required("An edit note is required."),
@@ -18,9 +20,10 @@ export type FormData = yup.Asserts<typeof schema>;
 
 interface Props {
   scene: Scene;
+  reason: string;
 }
 
-const SceneDelete: FC<Props> = ({ scene }) => {
+const SceneDelete: FC<Props> = ({ scene, reason }) => {
   const history = useHistory();
   const {
     register,
@@ -29,6 +32,7 @@ const SceneDelete: FC<Props> = ({ scene }) => {
   } = useForm<FormData>({
     resolver: yupResolver(schema),
     mode: "onBlur",
+    defaultValues: { note: reason }
   });
   const [deleteSceneEdit, { loading: deleting }] = useSceneEdit({
     onCompleted: (data) => {
@@ -51,14 +55,9 @@ const SceneDelete: FC<Props> = ({ scene }) => {
 
   return (
     <Form className="SceneDeleteForm" onSubmit={handleSubmit(handleDelete)}>
-      <Row>
-        <h4>
-          Delete scene <em>{scene.title}</em>
-        </h4>
-      </Row>
       <Form.Control type="hidden" value={scene.id} {...register("id")} />
       <Row className="my-4">
-        <Col md={6}>
+        <Col>
           <EditNote register={register} error={errors.note} />
           <div className="d-flex mt-2">
             <Button
@@ -79,6 +78,9 @@ const SceneDelete: FC<Props> = ({ scene }) => {
             </Button>
           </div>
         </Col>
+      </Row>
+      <Row>
+        <SceneCard scene={scene} />
       </Row>
     </Form>
   );

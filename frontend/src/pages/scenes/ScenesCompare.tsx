@@ -1,9 +1,11 @@
 import { FC, useState, useEffect } from "react";
-import { Button, Form, Row, Col, Card } from "react-bootstrap";
+import { Button, Form, Row, Col, Card, Modal } from "react-bootstrap";
 import Title from "src/components/title";
 import { useApolloClient } from "@apollo/client";
+import { TargetTypeEnum, OperationEnum } from "src/graphql";
 import { SceneVariables, Scene } from "src/graphql/definitions/Scene";
 import SceneQuery from "src/graphql/queries/Scene.gql";
+import SceneCard from "./SceneCard"
 
 import { usePagination } from "src/hooks";
 import Pagination from "src/components/pagination";
@@ -25,12 +27,21 @@ import {
   compareByName,
 } from "src/utils";
 import { URLList } from "src/components/list";
-import { TargetTypeEnum } from "src/graphql";
 import PendingEditsCountQuery from "src/graphql/queries/PendingEditsCount.gql";
 import {
   PendingEditsCount,
   PendingEditsCountVariables,
 } from "src/graphql/definitions/PendingEditsCount";
+import { faCheckCircle } from "@fortawesome/free-solid-svg-icons";
+import SceneDelete from "./SceneDelete"
+
+enum STATUS_ENUM {
+  REVIEW = "Review",
+  DELETE = "Delete",
+  MERGE = "Mege",
+  REDISTRIB = "Redistribution",
+  DIFF = "Different"
+}
 
 const ScenesCompareComponent: FC = () => {
   const client = useApolloClient();
@@ -41,15 +52,34 @@ const ScenesCompareComponent: FC = () => {
   const [sceneBId, setSceneBId] = useState<string | undefined>("");
   const [pagesNumber, setPagesNumber] = useState<int | undefined>(0);
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [sceneToDelete, setSceneToDelete] = useState("");
+  const [sceneToDeleteReason, setSceneToDeleteReason] = useState("");
+
   const [loadedA, setLoadedA] = useState<boolean | undefined>("false");
   const [sceneA, setSceneA] = useState("");
   const [loadedB, setLoadedB] = useState<boolean | undefined>("false");
   const [sceneB, setSceneB] = useState("");
   const [sceneAEditsCount, setSceneAEditsCount] = useState(0);
   const [sceneBEditsCount, setSceneBEditsCount] = useState(0);
+  const [comparisonStatus, setComparisonStatus] = useState(STATUS_ENUM.REVIEW);
 
   const [scenesListFile, setScenesListFile] = useState("");
   const [scenesList, setScenesList] = useState({});
+  const [scenesListFilename, setScenesListFilename] = useState("");
+
+  const handleCloseDeleteModal = () => setShowDeleteModal(false);
+  const handleShowDeleteModal = (scene, reason) =>{
+    if(scene && scene.id){
+      setSceneToDelete(scene);
+      setSceneToDeleteReason(reason);
+      setShowDeleteModal(true);
+      markStatus(STATUS_ENUM.DELETE)
+    }
+    else{
+      alert("No scene selected")
+    }
+  }
 
   const [sceneTable, setsceneTable] = useState({
     title_difflib: "",
@@ -70,7 +100,7 @@ const ScenesCompareComponent: FC = () => {
     }
   };
 
-  const parseScenesFile = (scenesCSV: string) => {
+  const parseScenesFile = (scenesCSV: string, filtered: boolean) => {
     readString(scenesCSV, {
       worker: false,
       header: true,
@@ -83,18 +113,22 @@ const ScenesCompareComponent: FC = () => {
         return value.replace("/\\r/g", "").trim();
       },
       complete: (results) => {
-        console.log(results);
+        results.filteredData = filtered ? results.data.filter(item => typeof item.Status == 'undefined' || item.Status == STATUS_ENUM.REVIEW ) : results.data
         setScenesList(results);
-        setPagesNumber(results.data.length);
+        setPagesNumber(results.filteredData.length);
+        setPage(1);
       },
     });
   };
 
-  const onLoadScenes = () => {
+  const onLoadScenes = (filtered = true) => {
     if (scenesListFile && scenesListFile.type == "text/csv") {
+      setScenesListFilename(scenesListFile.name)
+      setPage(1)
+
       const reader = new FileReader();
       reader.onload = (e) =>
-        e.target?.result && parseScenesFile(e.target.result);
+        e.target?.result && parseScenesFile(e.target.result, filtered);
       reader.onerror = () => setScenesList({});
       reader.onabort = () => setScenesList({});
       reader.readAsText(scenesListFile);
@@ -115,7 +149,7 @@ const ScenesCompareComponent: FC = () => {
       type: "data:text/csv;charset=utf-8",
     });
     element.href = URL.createObjectURL(file);
-    element.download = scenesListFile.name;
+    element.download = scenesListFilename;
     document.body.appendChild(element);
     element.click();
     return null;
@@ -170,14 +204,54 @@ const ScenesCompareComponent: FC = () => {
     ));
   };
 
+  const markStatus = (status) => {
+    const comparisonId = scenesList.data.findIndex( el => el.SceneA_ID == scenesList.filteredData[page - 1].SceneA_ID && el.SceneB_ID == scenesList.filteredData[page - 1].SceneB_ID)
+    scenesList.data[comparisonId].Status = status
+    scenesList.filteredData[page - 1].Status = status
+    setComparisonStatus(status)
+    updateStorage()
+  }
+
+  const clearState = () => {
+    window.localStorage.clear()
+    window.location.reload()
+  }
+
+  const updateStorage = () => {
+    window.localStorage.setItem("savedState", JSON.stringify({filename:scenesListFilename, list:scenesList}))
+  }
+
+  const loadStorage = () => {
+    const savedData = window.localStorage.getItem("savedState")
+    if(savedData !== null){
+      let {filename, list} = JSON.parse(savedData);
+      setScenesListFilename(filename)
+      setScenesList(list)
+      setPagesNumber(list.filteredData.length);
+      setPage(1);
+    }
+  }
+
+// Load LocalStorage on page first load
+  useEffect(loadStorage, [])
+
+// If one of the scenes is already deleted, or has a delete edit pending, mark as already handled
+  useEffect(() => {
+    if (scenesList && scenesList.filteredData && loadedA && loadedB && scenesList.filteredData[page - 1].Status !== STATUS_ENUM.DELETE && (sceneA.deleted || sceneB.deleted || sceneAEditsCount > 0 || sceneBEditsCount > 0) ) {
+      setComparisonStatus(STATUS_ENUM.DELETE)
+      markStatus(STATUS_ENUM.DELETE)
+      updateStorage()
+    }
+  }, [sceneAEditsCount, sceneBEditsCount]);
+
   useEffect(() => {
     const queryLoadScenes = async () => {
+      setLoadedA("false");
+      setLoadedB("false");
       if (!sceneAId) {
-        setLoadedA("false");
         setSceneA("");
       }
       if (!sceneBId) {
-        setLoadedB("false");
         setSceneB("");
       }
       if (!sceneAId || !sceneBId) {
@@ -204,10 +278,9 @@ const ScenesCompareComponent: FC = () => {
         variables: {
           type: TargetTypeEnum.SCENE,
           id: sceneAId,
-          operation: "DESTROY",
         },
       });
-      setSceneAEditsCount(editData?.queryEdits.count);
+      setSceneAEditsCount(editData.queryEdits.count);
 
       setLoadedA("true");
 
@@ -231,47 +304,48 @@ const ScenesCompareComponent: FC = () => {
         variables: {
           type: TargetTypeEnum.SCENE,
           id: sceneBId,
-          operation: "DESTROY",
         },
       });
-      setSceneBEditsCount(editData?.queryEdits.count);
+      setSceneBEditsCount(editData2.queryEdits.count);
 
       setLoadedB("true");
     };
     queryLoadScenes();
   }, [sceneAId, sceneBId]);
-
+  
   useEffect(() => {
     const setCurrentScenes = () => {
       // Check if data has been loaded
-      if (scenesList && scenesList.data && scenesList.data.length > 0) {
-        console.log(scenesList.data[page - 1]);
-        setSceneAId(scenesList.data[page - 1].SceneA_ID);
-        setSceneBId(scenesList.data[page - 1].SceneB_ID);
+      if (scenesList && scenesList.filteredData && scenesList.filteredData.length > 0) {
+        console.log(scenesList.filteredData[page - 1]);
+        setSceneAId(scenesList.filteredData[page - 1].SceneA_ID);
+        setSceneBId(scenesList.filteredData[page - 1].SceneB_ID);
         setsceneTable((previousState) => {
           return {
             ...previousState,
-            title_difflib: scenesList.data[page - 1].Title_difflib,
-            image_phash: scenesList.data[page - 1].Image_phash,
-            image_ahash: scenesList.data[page - 1].Image_ahash,
-            urls: scenesList.data[page - 1].URLs_check,
+            title_difflib: scenesList.filteredData[page - 1].Title_difflib,
+            image_phash: scenesList.filteredData[page - 1].Image_phash,
+            image_ahash: scenesList.filteredData[page - 1].Image_ahash,
+            urls: scenesList.filteredData[page - 1].URLs_check,
           };
         });
+        setComparisonStatus(scenesList.filteredData[page - 1].Status);
       }
     };
     setCurrentScenes();
-  }, [scenesList, page]);
+  }, [scenesList, page, comparisonStatus]);
 
   return (
     <>
       <Title page="Scenes Compare" />
       <h3>Compare Scenes</h3>
       <Row>
-        <Form.Group controlId="scenesFile" className="col-4">
+        <Form.Group controlId="scenesFile" className="col-3">
           <Form.Control
             type="file"
             accept={".csv"}
             size="sm"
+            defaultValue={scenesListFile}
             onChange={(v) => setScenesListFile(v.target.files[0])}
           />
         </Form.Group>
@@ -285,11 +359,27 @@ const ScenesCompareComponent: FC = () => {
         </Button>
         <Button
           variant="primary"
+          className="col-1 ms-1 mb-4 text-truncate"
+          size="sm"
+          onClick={() => onLoadScenes(false)}
+        >
+          Load Unfiltered
+        </Button>
+        <Button
+          variant="primary"
           className="col-1 ms-1 mb-4"
           size="sm"
           onClick={onSaveScenes}
         >
           Save State
+        </Button>
+        <Button
+          variant="secondary"
+          className="col-1 ms-1 mb-4"
+          size="sm"
+          onClick={clearState}
+        >
+          Clear
         </Button>
         <Col />
         <Col className="col-4">
@@ -304,26 +394,28 @@ const ScenesCompareComponent: FC = () => {
       </Row>
       <Row className="mb-4">
         <Col className="col-7">
-          <Button variant="danger" className="ms-1">
+          <Button variant="danger" className="ms-1" onClick={() => {(sceneAEditsCount > 0 || sceneA.deleted) ? alert("Scene A already marked for deletion") : handleShowDeleteModal(sceneA,"Dupe of https://stashdb.org/scenes/"+ sceneB.id + "")}}>
             Dupe Delete A
           </Button>
-          <Button variant="danger" className="ms-1">
+          <Button variant="danger" className="ms-1" onClick={() => {(sceneBEditsCount > 0 || sceneB.deleted) ? alert("Scene B already marked for deletion") : handleShowDeleteModal(sceneB,"Dupe of https://stashdb.org/scenes/"+ sceneA.id + "")}}>
             Dupe Delete B
           </Button>
           <Button
             variant="warning"
             className="ms-1"
             title="Save the status to CSV file to be added to the shared spreadsheet"
+            onClick={() => markStatus(STATUS_ENUM.MERGE)}
           >
             Dupe Merge
           </Button>
-          <Button variant="secondary" className="ms-1">
+          <Button variant="secondary" className="ms-1" onClick={() => markStatus(STATUS_ENUM.REDISTRIB)}>
             Redistribution
           </Button>
           <Button
             variant="secondary"
             className="ms-1"
             title="Mark as false positive"
+            onClick={() => markStatus(STATUS_ENUM.DIFF)}
           >
             Different
           </Button>
@@ -374,161 +466,19 @@ const ScenesCompareComponent: FC = () => {
           </tbody>
         </Table>
       </Row>
+      {(loadedA && loadedB && sceneA && sceneB && comparisonStatus !== STATUS_ENUM.REVIEW) &&
+        <Row className="mb-3 col-6 text-center mx-auto">
+        <h4 className={comparisonStatus == STATUS_ENUM.DELETE ? "text-alert" : comparisonStatus == STATUS_ENUM.MERGE ? "text-warning" : ""}>Scenes marked as {comparisonStatus} <b></b></h4>
+        </Row>
+      }
       {loadedA && loadedB && sceneA && sceneB && (
         <>
           <Row>
             <div className="col-6">
-              <Card className="scene-info">
-                <Card.Header>
-                  <h3>
-                    <span>
-                      <a
-                        href={"/scenes/" + sceneA.id}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {sceneA.title}
-                      </a>
-                      {sceneAEditsCount > 0 && " (Delete In Progress)"}
-                    </span>
-                  </h3>
-                  <h6>
-                    {sceneA.studio && (
-                      <>
-                        {sceneA.studio.name}
-                        <span className="mx-1">•</span>
-                      </>
-                    )}
-                    {sceneA.release_date}
-                  </h6>
-                </Card.Header>
-                <Card.Body className="ScenePhoto">
-                  <Image
-                    images={sceneA.images}
-                    emptyMessage="Scene has no image"
-                  />
-                </Card.Body>
-                <Card.Footer className="d-flex mx-1">
-                  <div className="scene-performers me-auto">
-                    {getScenePerformers(sceneA)}
-                  </div>
-                  {sceneA.code && (
-                    <div className="ms-3">
-                      Studio Code: <strong>{sceneA.code}</strong>
-                    </div>
-                  )}
-                  {!!sceneA.duration && (
-                    <div title={`${sceneA.duration} seconds`} className="ms-3">
-                      Duration: <b>{formatDuration(sceneA.duration)}</b>
-                    </div>
-                  )}
-                  {sceneA.director && (
-                    <div className="ms-3">
-                      Director: <strong>{sceneA.director}</strong>
-                    </div>
-                  )}
-                </Card.Footer>
-              </Card>
-              <div className="scene-description">
-                <h4>Description:</h4>
-                <div>{sceneA.details}</div>
-                <div className="scene-tags">
-                  <h6>Tags:</h6>
-                  <ul className="scene-tag-list">{getSceneTags(sceneA)}</ul>
-                </div>
-                {getUrlBySite(sceneA.urls, "Studio") && (
-                  <>
-                    <hr />
-                    <div>
-                      <b>Studio URL: </b>
-                      <a
-                        href={getUrlBySite(sceneA.urls, "Studio")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {getUrlBySite(sceneA.urls, "Studio")}
-                      </a>
-                    </div>
-                  </>
-                )}
-              </div>
+              <SceneCard scene={sceneA} />
             </div>
-
             <div className="col-6">
-              <Card className="scene-info">
-                <Card.Header>
-                  <h3>
-                    <span>
-                      <a
-                        href={"/scenes/" + sceneB.id}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {sceneB.title}
-                      </a>
-                      {sceneBEditsCount > 0 && " (Delete In Progress)"}
-                    </span>
-                  </h3>
-                  <h6>
-                    {sceneB.studio && (
-                      <>
-                        {sceneB.studio.name}
-                        <span className="mx-1">•</span>
-                      </>
-                    )}
-                    {sceneB.release_date}
-                  </h6>
-                </Card.Header>
-                <Card.Body className="ScenePhoto">
-                  <Image
-                    images={sceneB.images}
-                    emptyMessage="Scene has no image"
-                  />
-                </Card.Body>
-                <Card.Footer className="d-flex mx-1">
-                  <div className="scene-performers me-auto">
-                    {getScenePerformers(sceneB)}
-                  </div>
-                  {sceneB.code && (
-                    <div className="ms-3">
-                      Studio Code: <strong>{sceneB.code}</strong>
-                    </div>
-                  )}
-                  {!!sceneB.duration && (
-                    <div title={`${sceneB.duration} seconds`} className="ms-3">
-                      Duration: <b>{formatDuration(sceneB.duration)}</b>
-                    </div>
-                  )}
-                  {sceneB.director && (
-                    <div className="ms-3">
-                      Director: <strong>{sceneB.director}</strong>
-                    </div>
-                  )}
-                </Card.Footer>
-              </Card>
-              <div className="scene-description">
-                <h4>Description:</h4>
-                <div>{sceneB.details}</div>
-                <div className="scene-tags">
-                  <h6>Tags:</h6>
-                  <ul className="scene-tag-list">{getSceneTags(sceneB)}</ul>
-                </div>
-                {getUrlBySite(sceneB.urls, "Studio") && (
-                  <>
-                    <hr />
-                    <div>
-                      <b>Studio URL: </b>
-                      <a
-                        href={getUrlBySite(sceneB.urls, "Studio")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {getUrlBySite(sceneB.urls, "Studio")}
-                      </a>
-                    </div>
-                  </>
-                )}
-              </div>
+              <SceneCard scene={sceneB} />
             </div>
           </Row>
           <Row className="border-top mt-5">
@@ -596,6 +546,19 @@ const ScenesCompareComponent: FC = () => {
           </Row>
         </>
       )}
+      <Modal show={showDeleteModal} onHide={handleCloseDeleteModal}>
+        <Modal.Header closeButton>
+          Delete Scene {sceneToDelete == sceneA ? "A" : "B"}
+        </Modal.Header>
+        <Modal.Body>
+          <SceneDelete scene={sceneToDelete} reason={sceneToDeleteReason} />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseDeleteModal}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </>
   );
 };
