@@ -278,6 +278,7 @@ const ScenesCompareComponent: FC = () => {
         variables: {
           type: TargetTypeEnum.SCENE,
           id: sceneAId,
+          operation: OperationEnum.DESTROY
         },
       });
       setSceneAEditsCount(editData.queryEdits.count);
@@ -304,6 +305,7 @@ const ScenesCompareComponent: FC = () => {
         variables: {
           type: TargetTypeEnum.SCENE,
           id: sceneBId,
+          operation: OperationEnum.DESTROY
         },
       });
       setSceneBEditsCount(editData2.queryEdits.count);
@@ -312,7 +314,7 @@ const ScenesCompareComponent: FC = () => {
     };
     queryLoadScenes();
   }, [sceneAId, sceneBId]);
-  
+
   useEffect(() => {
     const setCurrentScenes = () => {
       // Check if data has been loaded
@@ -551,7 +553,7 @@ const ScenesCompareComponent: FC = () => {
           Delete Scene {sceneToDelete == sceneA ? "A" : "B"}
         </Modal.Header>
         <Modal.Body>
-          <SceneDelete scene={sceneToDelete} reason={sceneToDeleteReason} />
+          <SceneDelete scene={sceneToDelete} reason={sceneToDeleteReason} exitCallback={handleCloseDeleteModal} />
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={handleCloseDeleteModal}>

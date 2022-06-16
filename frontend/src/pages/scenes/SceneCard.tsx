@@ -7,7 +7,7 @@ import {
   Scene_findScene as Scene,
   Scene_findScene_fingerprints as Fingerprint,
 } from "src/graphql/definitions/Scene";
-import { usePendingEditsCount, TargetTypeEnum } from "src/graphql";
+import { usePendingEditsCount, TargetTypeEnum, OperationEnum } from "src/graphql";
 import AuthContext from "src/AuthContext";
 import {
   canEdit,
@@ -49,6 +49,7 @@ const SceneCard: FC<Props> = ({ scene }) => {
   const { data: editData } = usePendingEditsCount({
     type: TargetTypeEnum.SCENE,
     id: scene.id,
+    operation: OperationEnum.DESTROY
   });
   const pendingEditCount = editData?.queryEdits.count;
 

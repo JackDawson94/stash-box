@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useState } from "react";
 import { useHistory } from "react-router-dom";
 import { Button, Col, Row, Form } from "react-bootstrap";
 import { useForm } from "react-hook-form";
@@ -21,10 +21,12 @@ export type FormData = yup.Asserts<typeof schema>;
 interface Props {
   scene: Scene;
   reason: string;
+  exitCallback?: () => void;
 }
 
-const SceneDelete: FC<Props> = ({ scene, reason }) => {
+const SceneDelete: FC<Props> = ({ scene, reason, exitCallback = () => {} }) => {
   const history = useHistory();
+  const [completedMessage, setCompletedMessage] = useState<string | undefined>("");
   const {
     register,
     handleSubmit,
@@ -36,7 +38,8 @@ const SceneDelete: FC<Props> = ({ scene, reason }) => {
   });
   const [deleteSceneEdit, { loading: deleting }] = useSceneEdit({
     onCompleted: (data) => {
-      if (data.sceneEdit.id) history.push(editHref(data.sceneEdit));
+      setCompletedMessage("Scene deleted successfully")
+      exitCallback()
     },
   });
 
@@ -55,6 +58,11 @@ const SceneDelete: FC<Props> = ({ scene, reason }) => {
 
   return (
     <Form className="SceneDeleteForm" onSubmit={handleSubmit(handleDelete)}>
+      { completedMessage && completedMessage !== "" &&
+        <Row>
+          <h4>{completedMessage}</h4>
+        </Row>
+      }
       <Form.Control type="hidden" value={scene.id} {...register("id")} />
       <Row className="my-4">
         <Col>

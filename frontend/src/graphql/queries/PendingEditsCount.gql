@@ -1,6 +1,6 @@
-query PendingEditsCount($type: TargetTypeEnum!, $id: ID!) {
+query PendingEditsCount($type: TargetTypeEnum!, $id: ID!, $operation:OperationEnum ) {
   queryEdits(
-    input: { target_type: $type, target_id: $id, status: PENDING, per_page: 1 }
+    input: { target_type: $type, target_id: $id, operation: $operation, status: PENDING, per_page: 1 }
   ) {
     count
   }
