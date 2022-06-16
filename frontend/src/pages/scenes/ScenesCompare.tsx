@@ -68,6 +68,14 @@ const ScenesCompareComponent: FC = () => {
   const [scenesList, setScenesList] = useState({});
   const [scenesListFilename, setScenesListFilename] = useState("");
 
+  const [sceneTable, setsceneTable] = useState({
+    title_difflib: "",
+    studio: "",
+    image_phash: "",
+    image_ahash: "",
+    urls: "",
+  });
+
   const handleCloseDeleteModal = () => setShowDeleteModal(false);
   const handleShowDeleteModal = (scene, reason) =>{
     if(scene && scene.id){
@@ -81,13 +89,20 @@ const ScenesCompareComponent: FC = () => {
     }
   }
 
-  const [sceneTable, setsceneTable] = useState({
-    title_difflib: "",
-    studio: "",
-    image_phash: "",
-    image_ahash: "",
-    urls: "",
-  });
+  const handleKeyPress = (event) => {
+    switch (event.key) {
+      case "ArrowRight":
+        if(page < scenesList.filteredData.length)
+          setPage(page+1)
+        break;
+      case "ArrowLeft":
+        if(page > 1)
+          setPage(page-1)
+        break;
+      default:
+        break;
+    }
+  }
 
   const sceneTablePresenter = (value) => {
     switch (value) {
@@ -338,7 +353,7 @@ const ScenesCompareComponent: FC = () => {
   }, [scenesList, page, comparisonStatus]);
 
   return (
-    <>
+    <div onKeyDown={handleKeyPress} tabIndex="0">
       <Title page="Scenes Compare" />
       <h3>Compare Scenes</h3>
       <Row>
@@ -561,7 +576,7 @@ const ScenesCompareComponent: FC = () => {
           </Button>
         </Modal.Footer>
       </Modal>
-    </>
+    </div>
   );
 };
 
